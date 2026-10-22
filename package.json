@@ -1,0 +1,41 @@
+{
+  "name": "unslop-core",
+  "version": "1.0.0",
+  "description": "Shared engine for the *-unslop-mcp servers: comment-aware regex/structural audits, suppressions, git-change discovery, toolchain checks, CLI mode and skill installer.",
+  "type": "module",
+  "main": "src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "anti-slop",
+    "lint",
+    "audit"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1"
+  },
+  "author": "Fikri Firman Fadilah",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fikrifirmanf/unslop-core.git"
+  },
+  "homepage": "https://github.com/fikrifirmanf/unslop-core#readme",
+  "bugs": {
+    "url": "https://github.com/fikrifirmanf/unslop-core/issues"
+  }
+}
