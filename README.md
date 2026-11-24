@@ -67,3 +67,10 @@ Tool handlers return a plain object; set `_failed: true` to mark the MCP result 
 ## License
 
 MIT © Fikri Firman Fadilah
+
+## Violation contract and telemetry (1.1)
+
+Every finding now carries `rule_id` and `fix_hint` next to the existing fields. `rule` stays for existing skills.
+
+- `fix_hint` comes from the rule's optional `fix` field. Without one, it is the rule's message after its first sentence ("Problem. Fix."). It is capped at 200 chars.
+- When the workspace has a `.doctor-unslop/` directory, the audit tool appends one privacy-safe line per scanned file to `.doctor-unslop/telemetry.jsonl` for `doctor-unslop loops`. Without that directory, nothing is written.

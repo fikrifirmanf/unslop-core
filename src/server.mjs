@@ -12,10 +12,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { audit } from "./audit.mjs";
 import { installSkills } from "./install.mjs";
+import { createTelemetry } from "./telemetry.mjs";
 
 const respond = (obj) => {
   if (typeof obj === "string") return { content: [{ type: "text", text: obj }], isError: false };
-  const { _failed, ...rest } = obj;
+  const { _failed, _scanned, _latencyMs, ...rest } = obj;
   return { content: [{ type: "text", text: JSON.stringify(rest, null, 2) }], isError: Boolean(_failed) };
 };
 
@@ -54,6 +55,7 @@ export async function run(cfg) {
     return;
   }
 
+  const telemetry = createTelemetry(pkg.name.replace(/-mcp$/, ""));
   const server = new Server({ name: pkg.name, version: pkg.version }, { capabilities: { tools: {}, prompts: {} } });
 
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [{ name: cfg.skill, description: cfg.description }] }));
@@ -80,7 +82,12 @@ export async function run(cfg) {
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args = {} } = req.params;
     if (name === loadTool) return respond(await loadSkill());
-    if (name === cfg.auditTool) return respond(await audit(args, root, cfg));
+    if (name === cfg.auditTool) {
+      const started = Date.now();
+      const result = await audit(args, root, cfg);
+      await telemetry.record(root, { ...result, _latencyMs: Date.now() - started });
+      return respond(result);
+    }
     const tool = tools.find((t) => t.name === name);
     if (!tool) throw new Error(`Unknown tool: ${name}`);
     try {
@@ -96,7 +103,7 @@ export async function run(cfg) {
 async function cliAudit(argv, root, cfg) {
   const json = argv.includes("--json");
   const result = await audit({ files: argv.filter((a) => !a.startsWith("--")) }, root, cfg);
-  const { _failed, ...rest } = result;
+  const { _failed, _scanned, ...rest } = result;
   if (json) console.log(JSON.stringify(rest, null, 2));
   else {
     for (const f of result.findings) console.log(`${f.file}:${f.line}  ${f.severity.padEnd(5)} ${f.rule}  ${f.message}${f.snippet ? `\n    ${f.snippet}` : ""}`);
