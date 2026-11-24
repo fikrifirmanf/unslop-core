@@ -111,6 +111,29 @@ export function matchRule(rule, raw, file) {
   return [...src.matchAll(globalize(rule.regex))].map((m) => ({ index: m.index, text: m[0] }));
 }
 
+const SENTENCE_BREAK = /(?<!\b(?:e\.g|i\.e|vs|etc))\.\s+(?=[A-Z`'"(])/;
+const MAX_HINT = 200;
+
+/**
+ * One-sentence repair instruction for a finding (the shared violation contract's `fix_hint`).
+ * Uses `rule.fix` when set; otherwise the message after its first sentence ("Problem. Fix."),
+ * falling back to the whole message.
+ */
+export function fixHint(rule, message) {
+  let hint = rule?.fix;
+  if (!hint) {
+    const parts = (message ?? "").split(SENTENCE_BREAK);
+    hint = parts.length > 1 ? parts.slice(1).join(". ") : message ?? "";
+  }
+  hint = hint.trim();
+  if (hint.length <= MAX_HINT) return hint;
+  const cut = hint.slice(0, MAX_HINT - 1);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), 1))}…`;
+}
+
+/** Adds the contract fields (`rule_id`, `fix_hint`) without removing the legacy `rule` field. */
+const withContract = (f) => ({ ...f, rule_id: f.rule_id ?? f.rule, fix_hint: f.fix_hint ?? fixHint(null, f.message) });
+
 function lineOf(src, index) {
   let n = 1;
   for (let i = 0; i < index && i < src.length; i++) if (src.charCodeAt(i) === 10) n++;
@@ -132,17 +155,20 @@ export function auditSource(raw, file, rules) {
   for (const rule of rules) {
     for (const m of matchRule(rule, raw, file)) {
       const line = lineOf(raw, m.index);
+      const message = m.message || rule.message;
       const finding = {
         file,
         line,
         rule: rule.id,
+        rule_id: rule.id,
         severity: rule.severity,
-        message: m.message || rule.message,
+        message,
+        fix_hint: fixHint(rule, message),
         snippet: (lines[line - 1] ?? m.text ?? "").trim().slice(0, 140),
       };
       const s = suppression(lines, line, rule.id);
       if (s?.reason) suppressed.push({ file, line, rule: rule.id, reason: s.reason });
-      else if (s) findings.push({ ...finding, severity: "ERROR", rule: "SUPPRESSION_WITHOUT_REASON", message: `unslop-ignore ${rule.id} needs a reason: \`unslop-ignore ${rule.id} -- why this is safe\`.` });
+      else if (s) findings.push({ ...finding, severity: "ERROR", rule: "SUPPRESSION_WITHOUT_REASON", rule_id: "SUPPRESSION_WITHOUT_REASON", message: `unslop-ignore ${rule.id} needs a reason: \`unslop-ignore ${rule.id} -- why this is safe\`.`, fix_hint: `Add a reason: \`unslop-ignore ${rule.id} -- why this is safe\`, or fix the finding.` });
       else findings.push(finding);
     }
   }
@@ -157,7 +183,7 @@ export function auditSource(raw, file, rules) {
 export async function audit(args, root, cfg) {
   const inputs = Array.isArray(args.files) ? args.files.filter((f) => typeof f === "string" && f) : [];
   const { files, errors, source } = await collectFiles(inputs, root, cfg.accept);
-  const findings = [...errors];
+  const findings = errors.map(withContract);
   const suppressed = [];
   const skippedGenerated = [];
   const explicit = new Set(inputs.map((f) => path.resolve(root, f)));
@@ -179,6 +205,7 @@ export async function audit(args, root, cfg) {
   const byRule = {};
   for (const f of findings) byRule[f.rule] = (byRule[f.rule] || 0) + 1;
   const failed = errorCount > 0;
+  const scanned = files.filter((f) => !skippedGenerated.includes(path.relative(root, f))).map((f) => path.relative(root, f) || path.basename(f));
   return {
     status: failed ? "FAIL" : "PASS",
     filesScanned: files.length - skippedGenerated.length,
@@ -196,6 +223,7 @@ export async function audit(args, root, cfg) {
         ? "No matching files were scanned. Pass the modified files or directories explicitly."
         : "All anti-slop checks passed. Review WARN findings before finishing.",
     _failed: failed,
+    _scanned: scanned,
   };
 }
 

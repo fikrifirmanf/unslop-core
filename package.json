@@ -1,6 +1,6 @@
 {
   "name": "unslop-core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Shared engine for the *-unslop-mcp servers: comment-aware regex/structural audits, suppressions, git-change discovery, toolchain checks, CLI mode and skill installer.",
   "type": "module",
   "main": "src/index.mjs",
